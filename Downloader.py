@@ -166,17 +166,20 @@ class Downloader:
         if self.__crash_event.is_set():
             raise Exception("下载未成功！！！")
 
-    def start(self, url, target_file, urlhandler=lambda u: u):
+    def start(self, url, urlhandler=lambda u: u):
         """开始下载
 
             :param url="": 下载的目标URL
 
-            :param target_file="": 保存在本地的目标文件名（完整路径，包括文件扩展名）
-
             :param urlhandler=lambdau:u: 目标URL的处理器，用来处理重定向或Content-Type不存在等问题
         """
+        target_file = url.split('/')[-1]
+
         # 记录下载开始时间
         start_time = time.time()
+        self.__logger.start_time = start_time
+        self.__logger.last_time = start_time
+        self.__logger.last_size = 0
 
         # 如果允许log
         if self.__enable_log:
@@ -209,6 +212,10 @@ class Logger(multiprocessing.Process):
         multiprocessing.Process.__init__(self, daemon=True)
         self.__threads_status = {}
         self.__msg_queue = msgq
+        self.start_time = 0
+        self.last_time = 0
+        self.last_size = 0
+        self.KBps = 0
 
     def __log_metainfo(self):
         """输出文件元信息
@@ -268,9 +275,16 @@ class Logger(multiprocessing.Process):
 
             :param downloaded_size: 整个文件已经下载的字节数
         """
-        print("|__已下载: {}KB / Total: {}KB".format(
+        if time.time() > self.last_time + 1:
+            self.KBps = (downloaded_size - self.last_size) / 1024 / (time.time() - self.last_time)
+            self.last_size = downloaded_size
+            self.last_time = time.time()
+
+        print("|__已下载: {}KB / Total: {}KB\n|__平均速度: {}KB/s\n|__最近一秒速度: {}KB/s".format(
             downloaded_size / 1024,
-            self.__threads_status["content_size"] / 1024
+            self.__threads_status["content_size"] / 1024,
+            downloaded_size / 1024 / (time.time() - self.start_time),
+            self.KBps
         ))
 
     def run(self):
@@ -281,12 +295,6 @@ class Logger(multiprocessing.Process):
                 self.__log_metainfo()
                 self.__log_threadinfo()
 
-
 if __name__ == '__main__':
-    DOWNLOADER = Downloader(
-        threads_num=10
-    )
-    DOWNLOADER.start(
-        url="http://download.unity3d.com/download_unity/linux/unity-editor-5.3.4f1+20160317_amd64.deb",
-        target_file="/apidiff/unity3d-5.3.4.deb",
-    )
+    DOWNLOADER = Downloader(threads_num=int(sys.argv[1]))
+    DOWNLOADER.start(url=str(sys.argv[2]))
