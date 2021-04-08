@@ -47,6 +47,11 @@ class Downloader:
         self.threads_num = threads_num
         self.chunk_size = chunk_size
         self.timeout = timeout if timeout != 0 else threads_num  # 超时时间正比于线程数
+        self.headers = {
+            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+            "authority": "internal-api-drive-stream.feishu.cn",
+            "cookie": "passport_web_did=6947578838889005057; locale=zh-CN; trust_browser_id=e9a754a6-69d0-47c1-8482-e9165e95760b; __tea__ug__uid=6947578820757145102; fid=dda233a4-1c1a-4ded-a3ab-49c16742b422; is_anonymous_session=; _csrf_token=ba3cd1ccbdb856e05c83e0a3f1f332a675f97c2b-1617609276; lang=zh; slardar_delay_type=a; _uuid_hera_ab_path_1=6948395566250344452; _ga=GA1.2.763540225.1617799414; _gid=GA1.2.852114280.1617799414; help_center_session=be440aa9-9e82-4628-9127-0d09b979851f; session=XN0YXJ0-28d07e40-91e2-4353-ba18-79da3e6c8f8g-WVuZA; landing_url=https://activity.feishu.cn/activity/ug/signup/1041?tracking_code=7010o0000024cQ3AAI&utm_from=baidu_gjc_pc_qg_allppqt_all&source=baidu&device=PC&e_keywordid=208827806780&e_keywordid2=208827806780&ad_platform_id=baidusearch_lead&account_id=28166825&bd_vid=8538216140877543234; __tea_cookie_tokens_3414=%257B%2522web_id%2522%253A%25229007334307869518981%2522%252C%2522ssid%2522%253A%25227e0b4ff5-fc3d-4126-a39a-2d84d403e8bf%2522%252C%2522user_unique_id%2522%253A%25226947578820757145102%2522%252C%2522timestamp%2522%253A1617869516553%257D; swp_csrf_token=3e1b470e-0ce3-4c3a-833c-883b1fea4995; t_beda37=60e0e37e2c7616e6ef45252cb6e59d47acc3ef845edde153e25233eda5044687"
+        }
 
         self.__content_size = 0
         self.__file_lock = threading.Lock()
@@ -63,7 +68,7 @@ class Downloader:
         """建立连接
         """
         print("建立连接中......")
-        hdr = requests.head(url).headers
+        hdr = requests.head(url=url,headers=self.headers,stream=True,timeout=1000).headers
         self.__content_size = int(hdr["Content-Length"])
         print("连接已经建立. 文件大小：{}B".format(self.__content_size))
 
@@ -99,6 +104,8 @@ class Downloader:
         headers = {
             "Range": "bytes={}-{}".format(page["start_pos"], page["end_pos"])
         }
+        headers.update(self.headers)
+
         thread_name = threading.current_thread().name
         # 初始化当前进程信息列表
         self.__threads_status[thread_name] = {
@@ -166,14 +173,15 @@ class Downloader:
         if self.__crash_event.is_set():
             raise Exception("下载未成功！！！")
 
-    def start(self, url, urlhandler=lambda u: u):
+    def start(self, url, target_file=None, urlhandler=lambda u: u):
         """开始下载
 
             :param url="": 下载的目标URL
 
             :param urlhandler=lambdau:u: 目标URL的处理器，用来处理重定向或Content-Type不存在等问题
         """
-        target_file = url.split('/')[-1]
+        if target_file is None:
+            target_file = url.split('/')[-1]
 
         # 记录下载开始时间
         start_time = time.time()
@@ -297,4 +305,9 @@ class Logger(multiprocessing.Process):
 
 if __name__ == '__main__':
     DOWNLOADER = Downloader(threads_num=int(sys.argv[1]))
-    DOWNLOADER.start(url=str(sys.argv[2]))
+    if len(sys.argv) == 3:
+        DOWNLOADER.start(url=str(sys.argv[2]))
+    elif len(sys.argv) == 4:
+        DOWNLOADER.start(url=str(sys.argv[2]), target_file=str(sys.argv[3]))
+    else:
+        print('Argument num error!')
